@@ -1,0 +1,93 @@
+﻿@page "/manager/notifications"
+
+<PageTitle>Notificar</PageTitle>
+@using System.Net.Mail
+@using System.Net
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
+
+@attribute [Authorize(Roles = "Manager,Admin")]
+
+<RadzenCard Style="color:slategray">
+    <div>
+        <p>Serviço em desenvolvimento!<RadzenIcon Icon="code_off"></RadzenIcon></p>
+    </div>
+</RadzenCard>
+<br />
+@* <RadzenCard>
+    <form>
+        <div class="form-group" style="display:flex">
+            <label for="from">De:</label>
+            <div class="mx-4 px-2" style="background-color: lightgray; border-radius: 10px;">
+                <p>tutoria@utad.pt</p>
+            </div>
+
+        </div>
+        <div class="form-group" style="display:flex">
+            <label class="pt-1" for="to">Para:</label>
+            <input type="email" class="form-control" id="to" placeholder="Insira o endereço de email do destinatário">
+        </div>
+        <hr />
+        <div class="form-group">
+            <input type="text" class="form-control" id="subject" placeholder="Assunto">
+        </div>
+        <hr />
+        <div class="form-group">
+            <textarea class="form-control" id="message" rows="3" placeholder="Insira a mensagem"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary" @onclick="SendEmail">Enviar</button>
+    </form>
+
+</RadzenCard> *@
+
+@* <style>
+    input[type='email'], textarea[id='message'], input[type='text'] {
+        outline: 0px;
+        border: 0px;
+    }
+    input[type='email']:focus, textarea:focus, input[type='text']:focus {
+        outline: 0px;
+        border: 0px;
+    }
+</style> *@
+
+@code {
+    [Inject]
+    public IJSRuntime JSRuntime { get; set; }
+
+
+    // private async Task SendEmail()
+    // {
+    //     try
+    //     {
+    //         var from = "from@example.com";
+    //         var to = "to@example.com";
+    //         var subject = "Subject";
+    //         var body = "Body";
+
+    //         var message = new MailMessage(from, to, subject, body);
+    //         var client = new SmtpClient
+    //         {
+    //         Host = "smtp.gmail.com",
+    //         Port = 587,
+    //         EnableSsl = true,
+    //         DeliveryMethod = SmtpDeliveryMethod.Network,
+    //         UseDefaultCredentials = false,
+    //         Credentials = new NetworkCredential("username", "password")
+    //         };
+
+    //         await client.SendMailAsync(message);
+    //         await ShowMessage("E-mail enviado com sucesso!", "Sucesso");
+    //     }
+    //     catch (Exception ex)
+    //     {
+    //         await ShowMessage("Ocorreu um erro ao enviar o e-mail. Tente novamente mais tarde.", "Erro");
+    //     }
+    // }
+
+    // private async Task ShowMessage(string message, string title)
+    // {
+    //     await JSRuntime.InvokeAsync<object>("alert", new object[] { message });
+    // }
+
+}

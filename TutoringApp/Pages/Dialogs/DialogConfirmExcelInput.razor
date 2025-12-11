@@ -1,0 +1,120 @@
+﻿﻿@using TutoringApp.Models
+@using TutoringApp.Services
+
+@inject IEnrollementService EnrollementService
+@inject IMeetingService MeetingService
+@inject DialogService dialogService
+@inject NotificationService NotificationService
+
+<div style="min-height: 100%;position:relative;">
+    <div style="padding-bottom: 50px;">
+        <RadzenText TextStyle="TextStyle.DisplayH6">Lista de novas inscrições:</RadzenText>
+        @if (NonExistentCourses.Count > 0)
+        {
+            <RadzenText TextStyle="TextStyle.Subtitle2">@NonExistentCourses.Count inscricoes não serão efetuadas pois o curso associado nao existe. Verifique que os seguintes cursos existem.</RadzenText>
+
+            <div class="row">
+                @foreach (int course in courses)
+                {
+                    <div class="col-auto">
+                        <RadzenButton Variant="Variant.Outlined" ButtonStyle="ButtonStyle.Info" class="rounded-3">@course</RadzenButton>
+                    </div>
+                }
+            </div>
+            <br />
+        }
+        <RadzenText TextStyle="TextStyle.Body1">Novas inscrições: @NewEnrollments.Count</RadzenText>
+        <RadzenText TextStyle="TextStyle.Body1">Duplicados: @DuplicatedEnrollments.Count</RadzenText>
+
+        <RadzenDataGrid @ref="grid" Data="@NewEnrollments" AllowFiltering="true" AllowPaging="true" PageSize="15" AllowSorting="true">
+            <Columns>
+                <RadzenDataGridColumn TItem="Enrollement" Title="Username" Property="User.UserName" />
+                <RadzenDataGridColumn TItem="Enrollement" Title="Role">
+                    <Template Context="data">
+                        <span style='color:@roleColors[data.Role]; border-radius:5px'>
+                            @(data.Role == "Tutor" ? "Tutor" : (data.Role == "Mentor" ? "Mentor" : data.Role))
+                        </span>
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="Enrollement" Title="Ações">
+                    <Template Context="data">
+                        <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="delete" Variant="Variant.Flat" Shade="Shade.Lighter" Size="ButtonSize.Medium" Click="@(args => DeleteRow(data))" @onclick:stopPropagation="true">
+                        </RadzenButton>
+                    </Template>
+                </RadzenDataGridColumn>
+            </Columns>
+        </RadzenDataGrid>
+        <br />
+        @if (DuplicatedEnrollments.Count > 0)
+        {
+            <RadzenText TextStyle="TextStyle.Body1">As inscrições seguintes já se encontram registadas ou apresentam uma função inválida (Empty), portanto, serão ignoradas:</RadzenText>
+            <RadzenDataGrid Data="@DuplicatedEnrollments" AllowFiltering="true" AllowPaging="true" PageSize="15" AllowSorting="true">
+                <Columns>
+                    <RadzenDataGridColumn TItem="Enrollement" Title="Username" Property="User.UserName" />
+                    <RadzenDataGridColumn TItem="Enrollement" Title="Role">
+                        <Template Context="data">
+                            <span style='color:@roleColors[data.Role]; border-radius:5px'>
+                                @(data.Role == "Tutor" ? "Tutor" : (data.Role == "Mentor" ? "Mentor" : (data.Role == "Tutorando" ? "Tutorando" : data.Role)))
+                            </span>
+                        </Template>
+                    </RadzenDataGridColumn>
+                </Columns>
+            </RadzenDataGrid>
+        }
+    </div>
+    <div class="pt-3" style="position:absolute; bottom:0px; height:50px">
+        <div class="col">
+            <RadzenButton Text="Confirmar" ButtonStyle="ButtonStyle.Primary" IsBusy="@isLoading" Class="me-1" Click="@Submit" />
+            <RadzenButton Text="Cancelar" ButtonStyle="ButtonStyle.Light" Class="me-1" Click="@((args) => dialogService.Close())" />
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public List<Enrollement> NewEnrollments { get; set; }
+    [Parameter]
+    public List<Enrollement> DuplicatedEnrollments { get; set; }
+    [Parameter]
+    public List<int> NonExistentCourses { get; set; }
+    [Parameter]
+    public int YearId { get; set; }
+
+    RadzenDataGrid<Enrollement> grid;
+
+    List<int> courses { get; set; }
+
+    bool isLoading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        courses = NonExistentCourses.Distinct().ToList();
+    }
+
+    private readonly Dictionary<string, string> roleColors = new Dictionary<string, string>
+    {
+        {"Tutor", "red"},
+        {"Mentor", "green"},
+        {"Tutorando", "blue"},
+        {"Empty", "gray"}
+    };
+
+    List<string> cards = new List<string>
+    {
+        "Reunião presencial individual","Reunião presencial em grupo","Videoconferência","Email","Telefone","SMS", "Outro"
+    };
+    async Task DeleteRow(Enrollement enrollement)
+    {
+        NewEnrollments.Remove(enrollement);
+        // update grid
+        await grid.Reload();
+    }
+    async Task Submit()
+    {
+        isLoading = true;
+        var result = await EnrollementService.CreateEnrollementsByList(NewEnrollments, YearId);
+        isLoading = false;
+        dialogService.Close(result);
+    }
+}

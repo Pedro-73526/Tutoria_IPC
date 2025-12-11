@@ -1,0 +1,137 @@
+﻿@page "/login"
+@layout EmptyLayout
+
+@using Microsoft.AspNetCore.Identity;
+@using TutoringApp.Data;
+
+@attribute [AllowAnonymous]
+@inject SignInManager<ApplicationUser> SignInMgr
+@inject UserManager<ApplicationUser> UserMgr
+@inject NavigationManager NavMgr
+@inject ExternalAuthService _externalAuthService
+@inject TutoringApp.Services.IUserService UserService
+
+
+<RadzenCard class="centered-card">
+    @*<RadzenImage Path="./logo-tutoria-vertical-PTM-1.png" Style="width: 100%;" class="px-2" />*@
+    <RadzenCard class="child-card py-4 shadow-none">
+        <RadzenTemplateForm TItem="User" Data=@user Submit=@LoginClicked InvalidSubmit=@OnInvalidSubmit>
+            <RadzenText TextStyle="TextStyle.Subtitle2" TagName="TagName.H3" class="full-width">Nome de utilizador</RadzenText>
+            <RadzenTextBox @bind-Value=@user.Username Name="Nome de utilizador" Placeholder="Nome de utilizador" class="full-width" />
+            <RadzenRequiredValidator Component="Nome de utilizador" Text="O nome de utilizador é obrigatório" Style="display: block; margin-top: 5px;" />
+            <RadzenText TextStyle="TextStyle.Subtitle2" TagName="TagName.H3" class="mt-4 full-width">Palavra Passe</RadzenText>
+            <RadzenPassword @bind-Value=@user.password Name="Palavra Passe" Placeholder="Palavra Passe" class="full-width" />
+            <RadzenRequiredValidator Component="Palavra Passe" Text="Uma palavra passe é obrigatória" Style="display: block; margin-top: 5px;" />
+            <RadzenButton Text="Iniciar Sessão" ButtonType="ButtonType.Submit" IsBusy="@loadingButton" class="mt-4 full-width"></RadzenButton>
+            <RadzenText class="alert-danger full-width mt-4">@error</RadzenText>
+        
+        </RadzenTemplateForm>
+    </RadzenCard>
+</RadzenCard>
+
+@code {
+
+    public class User
+    {
+        public string Username { get; set; }
+
+        public string password { get; set; }
+    }
+
+    private string error;
+
+    private bool loadingButton;
+
+    User user = new User();
+
+    private async Task LoginClicked(User user)
+    {
+        try
+        {
+            error = null;
+            loadingButton = true;
+            var usr = await UserMgr.FindByNameAsync(user.Username);
+            
+            // Se o utilizador não existir localmente, tentar criar via WebService (Auto-Provisioning)
+            if (usr == null)
+            {
+                var creationResult = await UserService.CreateUser(user.Username);
+                if (creationResult.Success)
+                {
+                    usr = await UserMgr.FindByNameAsync(user.Username);
+                }
+                else
+                {
+                    error = $"User not found locally and auto-creation failed: {creationResult.Message}";
+                    loadingButton = false;
+                    return;
+                }
+            }
+
+            if (usr == null) // Double check
+            {
+                error = "User not found";
+                loadingButton = false;
+                return;
+            }
+
+            if (await SignInMgr.CanSignInAsync(usr))
+            {
+                var userInfo = await _externalAuthService.LoginAsync(user.Username, user.password);
+                if(userInfo != null)
+                {
+                    Guid key = Guid.NewGuid();
+                    var loginInfo = new LoginInfo { Username = this.user.Username, Password = this.user.password };
+                    if (BlazorCookieLoginMiddleware.Logins.ContainsKey(key))
+                    {
+                         BlazorCookieLoginMiddleware.Logins[key] = loginInfo;
+                    }
+                    else
+                    {
+                         BlazorCookieLoginMiddleware.Logins.TryAdd(key, loginInfo);
+                    }
+                    
+                    NavMgr.NavigateTo($"./login?key={key}", true);
+                }
+                else
+                {
+                    error = "Login failed. Check your password.";
+                }
+            }
+            else
+            {
+                error = "Your account is blocked";
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"An error occurred: {ex.Message}";
+            Console.WriteLine(ex.ToString());
+        }
+        finally
+        {
+            loadingButton = false;
+        }
+    }
+    void OnInvalidSubmit(FormInvalidSubmitEventArgs args)
+    {
+    }
+}
+<style>
+    .centered-card {
+        margin: auto;
+        width: 50%; /* Ajuste a largura conforme necessário */
+        max-width: 500px; /* Ajuste a largura máxima conforme necessário */
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .child-card {
+        width: 100%; /* Ocupa a largura total da Card pai */
+    }
+
+    .full-width {
+        width: 100%; /* Ocupa a largura total da Card filha */
+    }
+</style>

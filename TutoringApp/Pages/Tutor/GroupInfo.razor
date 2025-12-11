@@ -1,0 +1,268 @@
+﻿@page "/group/{GroupId:int}"
+
+@using TutoringApp.Models
+@using TutoringApp.Services
+@using System.Text
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using Newtonsoft.Json.Linq;
+@inject IGroupService GroupService
+@inject IMeetingService MeetingService
+@inject IHttpClientFactory ClientFactory
+@inject IConfiguration Configuration
+@inject NavigationManager Navigation
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+@inject AuthenticationStateProvider AuthStateProvider
+
+@attribute [Authorize(Roles = "Tutor,Manager,Admin")]
+
+@if (isCorrectTutor)
+{
+    <RadzenButton ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Click="() => GoBack()" Icon="arrow_back" Class="mt-2 mb-4" Text="Voltar" />
+
+    <h3>Informação do grupo</h3>
+
+    <RadzenButton ButtonStyle="ButtonStyle.Primary" Icon="add_circle_outline" Class="mt-2 mb-4" Text="Registar reunião" Click="CreateMeeting" />
+}
+<RadzenCard>
+    <div class="d-flex flex-row p-3">
+        <div class="col-md-4">
+            @if (mentee != null)
+            {
+                <RadzenImage Path="./user.png" Class="rounded-circle float-start me-3" Style="width: 100px; height: 100px;" />
+                <div>
+                <RadzenText TextStyle="TextStyle.Overline">Tutorando</RadzenText>
+                <RadzenText>@mentee.User.FirstName @mentee.User.LastName</RadzenText>
+                <RadzenText>@mentee.User.Email</RadzenText>
+                <RadzenText>@mentee.Course.CourseName</RadzenText>
+                <RadzenText TextStyle="TextStyle.Subtitle2">al @mentee.User.NumberMec</RadzenText>
+            </div>
+            }
+        </div>
+        <div class="col-md-4">
+            @if (mentor != null)
+            {
+                <div>
+                    <RadzenText TextStyle="TextStyle.Overline">Mentor</RadzenText>
+                    <RadzenText>@mentor.User.FirstName</RadzenText>
+                    <RadzenText>@mentor.User.Email</RadzenText>
+                    <RadzenText>@mentor.Course.CourseName</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Subtitle2">al @mentor.User.NumberMec</RadzenText>
+                </div>
+            }
+        </div>
+        <div class="col-md-4" style="display: flex; align-items: center;">
+            @if (value != 0)
+            {
+                <RadzenArcGauge Style="width: 100%; height: 100px;">
+                    <RadzenArcGaugeScale Step="1" Min="0" Max="100" MinorStep="2" Radius="1.5" Y="0.9" Margin="0">
+                        <RadzenArcGaugeScaleValue Value=@value ShowValue=true Fill=@color>
+                            <Template Context="pointer">
+                                @risk_info
+                                @*<h4>
+                        @pointer.Value <sup>%</sup>
+                        </h4>*@
+                            </Template>
+                        </RadzenArcGaugeScaleValue>
+                    </RadzenArcGaugeScale>
+                </RadzenArcGauge>
+            }
+        </div>
+    </div>
+</RadzenCard>
+
+<RadzenDataGrid @ref="grid" Data="@meetings" TItem="Meeting" IsLoading=@isLoading EmptyText="Este grupo não contem reuniões" PageSize="5" AllowPaging="true" ShowPagingSummary="true" AllowSorting="true">
+    <Columns>
+        <RadzenDataGridColumn TItem="Meeting" Property="Date" Title="Data" FormatString="{0:d}" SortOrder="SortOrder.Descending" />
+        <RadzenDataGridColumn TItem="Meeting" Property="Subject" Title="Assunto" />
+        <RadzenDataGridColumn TItem="Meeting" Property="Description" Title="Descrição" />
+        <RadzenDataGridColumn TItem="Meeting" Property="TypeContact" Title="Tipo de contacto" />
+        <RadzenDataGridColumn TItem="Meeting" Title="Ações">
+            <Template Context="meeting">
+                <RadzenButton title="Ver/Editar" Icon="edit" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Size="ButtonSize.Medium" Click="@(args => EditMeeting(meeting))" @onclick:stopPropagation="true">
+                </RadzenButton>
+                @if (AuthStateProvider.GetAuthenticationStateAsync().Result.User.IsInRole("Tutor"))
+                {
+                    <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="delete" Variant="Variant.Flat" Shade="Shade.Lighter" Size="ButtonSize.Medium" Class="my-1 ms-1" Click="@(args => DeleteMeetingConfirmDialog(meeting))" @onclick:stopPropagation="true">
+                    </RadzenButton>
+                }
+            </Template>
+        </RadzenDataGridColumn>
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+    [Parameter]
+    public int GroupId { get; set; }
+
+    RadzenDataGrid<Meeting>? grid;
+
+    bool isLoading;
+    public IEnumerable<Meeting> meetings { get; set; }
+    public Enrollement mentee { get; set; }
+    public Enrollement? mentor { get; set; }
+
+    // arc Gauge
+    double value;
+    string color;
+    string risk_info;
+
+    bool isCorrectTutor;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        isCorrectTutor = await GroupService.IsPermission(GroupId);
+        var user = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
+
+        if (isCorrectTutor || user.IsInRole("Admin") || user.IsInRole("Manager"))
+        {
+            meetings = MeetingService.GetMeetings(GroupId);
+            mentee = await GroupService.GetUserByRole(GroupId, "Tutorando");
+            mentor = await GroupService.GetUserByRole(GroupId, "Mentor");
+
+            if (mentee.User.NumberMec != null)
+            {
+                await GetPrediction(mentee.User.NumberMec);
+            }
+            isLoading = false;
+        }
+        else
+        {
+            Navigation.NavigateTo("./forbidden");
+        }
+        await base.OnInitializedAsync();
+    }
+    async Task DeleteMeeting(Meeting meeting)
+    {
+        await MeetingService.DeleteMeeting(meeting.Id);
+        NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Eliminado com sucesso", Detail = "O registo da reunião foi eliminado!", Duration = 5000 });
+        
+        // Update data table
+        meetings = meetings.Where(d => d.Id != meeting.Id).ToList();
+        StateHasChanged();
+    }
+    async Task DeleteMeetingConfirmDialog(Meeting meeting)
+    {
+        var result = await DialogService.OpenAsync("Eliminar registo", ds =>
+        @<div>
+            <p class="mb-4">Pretende <b>eliminar</b> o registo da reunião?</p>
+            <div class="row">
+                <div class="col">
+                <RadzenButton Text="Eliminar" Click="() => {ds.Close(true);DeleteMeeting(meeting);}" ButtonStyle="ButtonStyle.Danger" Class="me-1" />
+                    <RadzenButton Text="Cancelar" Click="() => ds.Close(false)" ButtonStyle="ButtonStyle.Light" Class="me-1" />
+                </div>
+            </div>
+        </div>
+    );
+    }
+    public async Task CreateMeeting()
+    {
+        Meeting result = await DialogService.OpenAsync<Dialogs.CreateMeetingComponent>($"Nova reunião",
+               new Dictionary<string, object>() { { "GroupId", GroupId } }, 
+               new DialogOptions() { Width = "700px", Height = "450px", Resizable = true, Draggable = true });
+        // if the result exist it means that the meeting has been created
+        // so, we need to update datagrid
+        if (result != null)
+        {
+            // Notify the creation of the new meeting
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Criado com sucesso", Detail = "Registou uma nova reunião!", Duration = 5000 });
+            // Update datagrid
+            // meetings = meetings.Concat(new[] { result });
+            grid.Reload();
+
+        }
+    }
+    public async Task EditMeeting(Meeting meeting)
+    {
+        await DialogService.OpenAsync<Dialogs.EditMeetingComponent>($"Editar reunião",
+               new Dictionary<string, object>() { { "Meeting", meeting } },
+               new DialogOptions() { Width = "700px", Height = "450px", Resizable = true, Draggable = true });
+        // if the result exist it means that the meeting has been created
+        // so, we need to update datagrid
+        grid.Reload();
+    }
+
+    async Task GetPrediction(string numberMec)
+    {
+        try
+        {
+
+            var request = new HttpRequestMessage(HttpMethod.Get,
+            Configuration["WS_GetPredict"] + numberMec);
+            request.Headers.Add("User-Agent", "HttpClientFactory-Sample");
+
+            string username = Configuration["EDUIA_Username"];
+            string password = Configuration["EDUIA_Password"];
+            var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(username + ":" + password));
+            request.Headers.Add("Authorization", "Basic " + encoded);
+
+            var client = ClientFactory.CreateClient();
+
+            var response = await client.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var responseString = await response.Content.ReadAsStringAsync();
+
+                JObject jsonResponse = JObject.Parse(responseString);
+                JToken predictions = jsonResponse["predictions"];
+                if (predictions != null && predictions.HasValues)
+                {
+                    JToken firstPrediction = predictions.First;
+                    JToken probabilityToken = firstPrediction["probability"];
+                    if (probabilityToken != null)
+                    {
+                        this.value = probabilityToken.Value<double>();
+                        if (value < 1) value = 3;
+                        SetColorAndRisk(this.value);
+                    }
+                }
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            Console.WriteLine($"An error ocurred: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"An error ocurred: {ex.Message}");
+        }
+
+
+    }
+
+    public void SetColorAndRisk(double value)
+    {
+        if (value >= 0 && value <= 39)
+        {
+            this.color = "rgba(0,255,0,1)"; // green
+            this.risk_info = "Baixo risco";
+            this.value = 20;
+        }
+        else if (value >= 40 && value <= 60)
+        {
+            this.color = "rgba(255,255,0,1)"; // yellow
+            this.risk_info = "Risco moderado";
+            this.value = 50;
+        }
+        else if (value >= 61 && value <= 80)
+        {
+            this.color = "rgba(255,144,0,1)"; // orange
+            this.risk_info = "Risco medio/alto";
+            this.value = 70;
+        }
+        else
+        {
+            this.color = "rgba(255,0,0,1)"; // red
+            this.risk_info = "Alto risco";
+            this.value = 88;
+        }
+    }
+
+    public void GoBack()
+    {
+        Navigation.NavigateTo("./groups");
+    }
+}

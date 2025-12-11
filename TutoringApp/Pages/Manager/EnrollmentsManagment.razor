@@ -1,0 +1,234 @@
+﻿@page "/manager/year/{YearId:int}/enrollments"
+
+@using TutoringApp.Models
+@using TutoringApp.Services
+@inject IJSRuntime JS
+@inject IYearService YearService
+@inject IEnrollementService EnrollementService
+@inject ICourseService CourseService
+@inject IExcelService ExcelService
+@inject DialogService DialogService
+@inject NavigationManager Navigation
+@inject NotificationService NotificationService
+
+@attribute [Authorize(Roles = "Manager,Admin")]
+
+<PageTitle>Gerir inscrições</PageTitle>
+
+<RadzenButton ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Click="() => GoBack()" Icon="arrow_back" Class="mt-2 mb-4" Text="Voltar" />
+
+<div class="d-flex flex-row">
+    <div class="col-md-8">
+        <h3>Gerir inscrições: @year.YearAcademic</h3>
+    </div>
+</div>
+<br />
+<RadzenTemplateForm TItem="User" Data="@user" Submit=@AddNewEnrollment class="mb-4">
+    <RadzenFieldset Text="Nova inscrição">
+        <div style="display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px;">
+            <div style="flex: 1; min-width: 250px;">
+                <RadzenTextBox @bind-Value=@user.Username Name="Username" Placeholder="Username" />
+                <RadzenButton title="Nos estudantes, colocar o prefixo 'al'. eg. al00000" Icon="help" 
+                    ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
+                    class="rz-border-radius-10 rz-shadow-2 p-0"
+                              Click=@(args => OnClick("Nos estudantes, colocar o prefixo 'al'. eg. al00000")) />
+                <RadzenRequiredValidator Component="Username" Text="É obrigatório inserir o username" Style="display: block; margin-top: 5px;" />
+            </div>
+            <div class="col-md-4" style="min-width: 250px;" >
+                <div style="flex: 1;">
+                    <RadzenDropDown AllowClear="true" Style="width: 100%;"
+                                    TValue="string" Placeholder="Selecione uma função"
+                                    TextProperty="RoleName" ValueProperty="RoleName"
+                                    Data="@roles" Name="RoleName" @bind-Value=@selectedRole
+                                    Class="w-100">
+                    </RadzenDropDown>
+                    <br/>
+                    <RadzenRequiredValidator Component="RoleName" Text="É obrigatório definir uma função" Style="position: absolute" />
+                </div>
+            </div>
+            <div class="col-md-4">
+                <RadzenDropDown AllowClear="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" AllowFiltering="true"
+                                TValue="int" Placeholder="Selecione um curso"
+                                TextProperty="CourseName" ValueProperty="CourseId"
+                                Data="@courses" Name="Course" Change=@(args => OnChange(args))
+                                Class="w-100">
+                </RadzenDropDown>
+            </div>
+        </div>
+        <RadzenButton Text="Adicionar inscrição" ButtonType="ButtonType.Submit" IsBusy="@loadingButton"></RadzenButton>
+    </RadzenFieldset>
+</RadzenTemplateForm>
+<br />
+<RadzenButton ButtonStyle="ButtonStyle.Success" Text="Download XLSX" Icon="grid_on" Click="@(args => ExportExcelFile())" Class="mb-4 me-2" />
+<RadzenDataGrid @ref="grid" Data="enrollments" AllowAlternatingRows="false" AllowFiltering="true" AllowPaging="true" PageSize="25" AllowSorting="true" class="mb-3">
+    <Columns>
+        <RadzenDataGridColumn TItem="Enrollement" Title="Username" Property="User.Username">
+            <Template Context="data">
+                @data.User.UserName
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="Enrollement" Title="Nome" Property="User.FirstName">
+            <Template Context="data">
+                @data.User.FirstName @data.User.LastName
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="Enrollement" Title="Email" Property="User.Email">
+            <Template Context="data">
+                @data.User.Email
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="Enrollement" Title="Função" Property="Role">
+            <Template Context="data">
+                <span style='color:@roleColors[data.Role]; border-radius:5px'>
+                    @data.Role
+                </span>
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="Enrollement" Title="Curso" Property="Course.CourseName">
+            <Template Context="data">
+                @data.Course.CourseName
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="Enrollement" Title="Nº grupos" Property="Groups.Count">
+            <Template Context="data">
+                @data.Groups?.Count
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="Enrollement" Filterable="false" Sortable="false" TextAlign="TextAlign.Right" Width="156px">
+            <Template Context="data">
+                <RadzenButton title="Anular inscrição" ButtonStyle="ButtonStyle.Danger" Icon="delete" Variant="Variant.Flat" Shade="Shade.Lighter" Size="ButtonSize.Medium" Click="@(args => DeleteEnrollmentConfirmDialog(data.Id))" @onclick:stopPropagation="true" />
+            </Template>
+        </RadzenDataGridColumn>
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+    [Parameter]
+    public int YearId { get; set; }
+
+    RadzenDataGrid<Enrollement> grid;
+
+    public IEnumerable<Enrollement> enrollments { get; set; }
+    byte[] fileStream;
+
+    public Year year { get; set; }
+
+    // Start Form -----
+    public IEnumerable<Course> courses { get; set; }
+    public int selectedCourse { get; set; }
+    public string selectedRole { get; set; }
+
+    public class User
+    {
+        public string Username { get; set; }
+
+    }
+    User user = new User();
+    private bool loadingButton;
+    public class Role
+    {
+        public string RoleName { get; set; }
+    }
+    List<Role> roles = new List<Role>
+    {
+        new Role { RoleName = "Tutor" },
+        new Role { RoleName = "Mentor" },
+        new Role { RoleName = "Tutorando" }
+    };
+
+    // End Form -----
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        year = YearService.GetYear(YearId);
+        enrollments = EnrollementService.GetEnrollements(YearId);
+        courses = CourseService.GetCourses().ToList();
+    }
+    public async Task AddNewEnrollment()
+    {
+        this.loadingButton = true;
+        if (this.selectedCourse == 0)
+        {
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Selecione um curso!", Duration = 3000 });
+
+        }
+        else
+        {
+            var (status, message, enrollment) = await EnrollementService.CreateEnrollmentByUsername(this.user.Username, this.selectedCourse, this.selectedRole, this.YearId);
+            if (status)
+            {
+                if (message.Equals("O utilizador já se encontra inscrito."))
+                {
+                    NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Aviso!", Detail = "O utilizador " + this.user.Username + " já se encontra inscrito.", Duration = 3000 });
+                }
+                else
+                {
+                    NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Inscrito com sucesso!", Detail = "O utilizador " + this.user.Username + " está inscrito.", Duration = 3000 });
+                    enrollments = enrollments.Prepend(enrollment);
+                    StateHasChanged(); // Notifies Blazor that the component's state has changed and needs to be re-rendered
+                    this.user.Username = "";
+                }
+            }
+            else
+            {
+                NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Erro!", Detail = "O utilizador " + this.user.Username + " não foi encontrado.", Duration = 3000 });
+            }        
+        }
+        this.loadingButton = false;
+    }
+
+    private readonly Dictionary<string, string> roleColors = new Dictionary<string, string>
+    {
+        {"Tutor", "red"},
+        {"Mentor", "green"},
+        {"Tutorando", "blue"}
+    };
+
+    // Based on https://learn.microsoft.com/en-us/aspnet/core/blazor/file-downloads?view=aspnetcore-7.0
+    async Task ExportExcelFile()
+    {
+        fileStream = ExcelService.ExportEnrollmentsTable(grid.View);
+        string fileName = "inscricoes" + YearId.ToString() + ".xlsx";
+        await JS.InvokeVoidAsync("DownloadFile", fileStream, fileName);
+    }
+
+    async Task DeleteEnrollment(int enrollmentId)
+    {
+        await EnrollementService.DeleteEnrollment(enrollmentId);
+        NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Eliminado com sucesso", Detail = "A inscrição foi eliminada!", Duration = 5000 });
+
+        // Update data table
+        enrollments = enrollments.Where(e => e.Id != enrollmentId).ToList();
+        StateHasChanged();
+    }
+    async Task DeleteEnrollmentConfirmDialog(int enrollmentId)
+    {
+        var result = await DialogService.OpenAsync("Eliminar inscrição", ds =>
+    @<div>
+        <p class="mb-4">Pretende <b>eliminar</b> esta inscrição?</p>
+        <div class="row">
+            <div class="col">
+                <RadzenButton Text="Eliminar" Click="() => {ds.Close(true);DeleteEnrollment(enrollmentId);}" ButtonStyle="ButtonStyle.Danger" Class="me-1" />
+                <RadzenButton Text="Cancelar" Click="() => ds.Close(false)" ButtonStyle="ButtonStyle.Light" Class="me-1" />
+            </div>
+        </div>
+        </div>
+    );
+    }
+    void OnChange(object value)
+    {
+        selectedCourse = Convert.ToInt32(value);
+    }
+
+    void OnClick(string text)
+    {
+        NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Ajuda", Detail = text });
+    }
+
+    public void GoBack()
+    {
+        Navigation.NavigateTo($"./manager/year/{YearId}");
+    }
+
+}

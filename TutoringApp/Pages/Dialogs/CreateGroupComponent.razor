@@ -1,0 +1,158 @@
+﻿@using TutoringApp.Models
+@using TutoringApp.Services
+
+@inject IMeetingService MeetingService
+@inject IEnrollementService EnrollementService
+@inject IGroupService GroupService
+@inject DialogService dialogService
+@inject NotificationService NotificationService
+
+<div style="min-height: 100%;position:relative;">
+    <div style="padding-bottom: 50px;">
+        <div class="row pb-2">
+            <div class="col">
+                <div class="align-items-baseline d-flex">
+                    <RadzenText TextStyle="TextStyle.Overline">Tutorando</RadzenText>
+                </div>
+                <div class="align-items-baseline d-flex">
+                    <RadzenText TextStyle="TextStyle.Caption">Escolha o tutorando:</RadzenText>
+                </div>
+                <div>
+                    <RadzenDropDown TValue="int" Data=@mentees TextProperty="User.Email" ValueProperty="Id" AllowClear=true AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Tutorandos sem grupo" Style="width: 100%; max-width: 400px;" Change=@(args => OnChangeMentee(args)) />
+                </div>
+            </div>
+        </div>
+        <hr/>
+        <div class="row py-2">
+            <div class="col">
+                <div class="align-items-baseline d-flex">
+                    <RadzenText TextStyle="TextStyle.Overline">Tutor</RadzenText>
+                </div>
+                <div class="align-items-baseline d-flex">
+                    <RadzenText TextStyle="TextStyle.Caption">Escolha o tutor:</RadzenText>
+                </div>
+                <div>
+                    <RadzenDropDown TValue="int" Data=@tutors TextProperty="User.Email" ValueProperty="Id" AllowClear=true AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Escolha o tutor" Style="width: 100%; max-width: 400px;" Change=@(args => OnChangeTutor(args)) />
+                </div>
+            </div>
+        </div>
+        <hr />
+        <div class="row py-2">
+            <div class="col">
+                <div class="align-items-baseline d-flex">
+                    <RadzenText TextStyle="TextStyle.Overline">Mentor</RadzenText>
+                </div>
+                <div class="align-items-baseline d-flex">
+                    <RadzenText TextStyle="TextStyle.Caption">Escolha o mentor:</RadzenText>
+                </div>
+                <div>
+                    <RadzenDropDown TValue="int" Data=@mentors TextProperty="User.Email" ValueProperty="Id" AllowClear=true AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Escolha o mentor" Style="width: 100%; max-width: 400px;" Change=@(args => OnChangeMentor(args)) />
+                </div>
+            </div>
+        </div>
+    </div>
+    @if (selectedMentee != 0 && selectedTutor != 0)
+    {
+            <div class="col">
+                <RadzenButton Text="Salvar"
+                        ButtonStyle="ButtonStyle.Primary"
+                        Class="me-1"
+                        Click="@Submit" />
+                <RadzenButton Text="Cancelar"
+                        ButtonStyle="ButtonStyle.Light"
+                        Class="me-1"
+                        Click="@((args) => dialogService.Close())" />
+            </div>
+    }
+</div>
+
+
+@code {
+    [Parameter]
+    public int yearId { get; set; }
+
+    int? value;
+    IEnumerable<Enrollement> mentees;
+    IEnumerable<Enrollement> tutors;
+    IEnumerable<Enrollement> mentors;
+
+    public int selectedMentee {get; set; }
+    public int selectedTutor { get; set; }
+    public int selectedMentor { get; set; }
+
+
+    //public Meeting originalMeeting { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        mentees = EnrollementService.GetEnrollementsWithoutGroupByRoleAllCourses(yearId, "Tutorando");
+
+    }
+    void OnChangeMentee(object value)
+    {
+        selectedMentee = Convert.ToInt32(value);
+
+        var selectedMenteeEnrollment = mentees.FirstOrDefault(m => m.Id == selectedMentee);
+
+        if (selectedMenteeEnrollment != null)
+        {
+            var courseId = selectedMenteeEnrollment.CourseId;
+            // Search tutors and mentors list here:
+            tutors = EnrollementService.GetEnrollementsByRole(yearId, "Tutor", courseId);
+            mentors = EnrollementService.GetEnrollementsByRole(yearId, "Mentor", courseId);
+        }
+        else
+        {
+            tutors = null;
+            mentors = null;
+        }
+
+
+    }
+    void OnChangeTutor(object value)
+    {
+        selectedTutor = Convert.ToInt32(value);
+    }
+    void OnChangeMentor(object value)
+    {
+        selectedMentor = Convert.ToInt32(value);
+    }
+    void Submit()
+    {
+        var enrollmentList = CreateEnrollmentList();
+        GroupService.CreateGroup(enrollmentList, yearId);
+        NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Criado com sucesso", Detail = "O grupo foi criado!", Duration = 5000 });
+        dialogService.Close();
+    }
+    List<Enrollement> CreateEnrollmentList()
+    {
+        var enrollmentList = new List<Enrollement>();
+
+        // Adicione o enrollment selecionado para mentee
+        var menteeEnrollment = mentees.FirstOrDefault(m => m.Id == selectedMentee);
+        if (menteeEnrollment != null)
+        {
+            enrollmentList.Add(menteeEnrollment);
+        }
+
+        // Adicione o enrollment selecionado para tutor
+        var tutorEnrollment = tutors.FirstOrDefault(t => t.Id == selectedTutor);
+        if (tutorEnrollment != null)
+        {
+            enrollmentList.Add(tutorEnrollment);
+        }
+
+        // Adicione o enrollment selecionado para mentor, se houver
+        if (selectedMentor != 0)
+        {
+            var mentorEnrollment = mentors.FirstOrDefault(m => m.Id == selectedMentor);
+            if (mentorEnrollment != null)
+            {
+                enrollmentList.Add(mentorEnrollment);
+            }
+        }
+
+        return enrollmentList;
+    }
+}

@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.3.32922.545
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TutoringApp", "TutoringApp\TutoringApp.csproj", "{E46DF2C1-73FE-44C6-B180-F07E8542B9FB}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TutoringApp.API", "TutoringApp.API\TutoringApp.API.csproj", "{F0690661-646D-4953-8B7F-4C634B89652D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{E46DF2C1-73FE-44C6-B180-F07E8542B9FB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E46DF2C1-73FE-44C6-B180-F07E8542B9FB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E46DF2C1-73FE-44C6-B180-F07E8542B9FB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E46DF2C1-73FE-44C6-B180-F07E8542B9FB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F0690661-646D-4953-8B7F-4C634B89652D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F0690661-646D-4953-8B7F-4C634B89652D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F0690661-646D-4953-8B7F-4C634B89652D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F0690661-646D-4953-8B7F-4C634B89652D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {D9153007-512E-48E5-8ACF-485FD483FE0A}
+	EndGlobalSection
+EndGlobal

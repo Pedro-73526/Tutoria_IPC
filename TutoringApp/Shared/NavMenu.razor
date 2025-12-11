@@ -1,0 +1,53 @@
+﻿<div style="width: 100%; text-align: center; padding: 14px;">
+    <a class="navbar-brand" href="">
+        @*<img src="./logo-tutoria-vertical-PTM-1.png" alt="Logo" style="width: 100%; object-fit: cover;">*@
+    </a>
+</div>
+
+<div class="@NavMenuCssClass" @onclick="ToggleNavMenu">
+    <nav class="flex-column">
+        <AuthorizeView Roles="Tutor">
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="groups">
+                    <RadzenIcon class="me-3" Icon="group" />Os meus tutorandos
+                </NavLink>
+            </div>
+        </AuthorizeView>
+        <AuthorizeView Roles="Manager,Admin">
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="manager/years">
+                    <RadzenIcon class="me-3" Icon="calendar_today" />Anos letivos
+                </NavLink>
+            </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="manager/courses">
+                    <RadzenIcon class="me-3" Icon="school" />Cursos
+                </NavLink>
+            </div>
+            @* <div class="nav-item px-3">
+                <NavLink class="nav-link" href="manager/notifications">
+                    <RadzenIcon class="me-3" Icon="notifications" />Notificar
+                </NavLink>
+            </div> *@
+        </AuthorizeView>
+        <AuthorizeView Roles="Admin">
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="manager/admin">
+                    <RadzenIcon class="me-3" Icon="admin_panel_settings" />Gerir gestores
+                </NavLink>
+            </div>
+        </AuthorizeView>
+    </nav>
+</div>
+
+@code {
+
+    private bool collapseNavMenu = true;
+
+    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+}

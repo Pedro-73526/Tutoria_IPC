@@ -1,0 +1,117 @@
+﻿@page "/manager/years"
+
+@using TutoringApp.Models
+@using TutoringApp.Services
+@inject IYearService YearService
+@inject DialogService DialogService
+@inject NavigationManager Navigation
+@inject NotificationService NotificationService
+
+@attribute [Authorize(Roles = "Manager,Admin")]
+
+<PageTitle>Gerir anos letivos</PageTitle>
+
+<h1>Ano letivos</h1>
+
+<RadzenButton ButtonStyle="ButtonStyle.Primary" Icon="add_circle_outline" Class="mt-2 mb-4" Text="Adicionar ano letivo" Click="@ModalShow" />
+<RadzenDataGrid Data="@years" TItem="Year" IsLoading=@isLoading>
+    <Columns>
+        <RadzenDataGridColumn TItem="Year" Property="YearAcademic" Title="Ano letivo"/>
+        <RadzenDataGridColumn TItem="Year" Property="IsActive" Title="Estado">
+            <Template Context="data">
+                @if (data.IsActive)
+                {
+                    <span style='color: var(--rz-success)'>Ativo</span>
+                }
+                else
+                {
+                    <span style='color: var(--rz-danger)'>Inativo</span>
+                }
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="Year" Context="order" Filterable="false" Sortable="false" TextAlign="TextAlign.Right">
+            <Template Context="data">
+                <RadzenButton Text="Gerir" Click="() => GoToYear(data.YearId)" ButtonStyle="ButtonStyle.Info" Variant="Variant.Flat" Size="ButtonSize.Small"/>
+            </Template>
+        </RadzenDataGridColumn>
+    </Columns>
+</RadzenDataGrid>
+
+
+@*Adicionar o pop up num component separado deste codigo*@
+@if (showModal)
+{
+    <div class="modal fade show" id="myModal" style="display:block" aria-modal="true" role="dialog">
+        <div class="modal-dialog">
+            <div class="modal-content">
+
+                <!-- Modal Header -->
+                <div class="modal-header">
+                    <h4 class="modal-title">Criar ano letivo</h4>
+                    <button type="button" class="close" @onclick="@ModalCancel">&times;</button>
+                </div>
+
+                <!-- Modal body -->
+                <div class="modal-body">
+                    <RadzenDropDown AllowClear="true" TValue="int" Data="@yearsDropDownList" ValueProperty="Year" TextProperty="YearRange" @bind-Value="yearToCreate" />
+                </div>
+
+                <!-- Modal footer -->
+                <div class="modal-footer">
+                    <button type="button" class="btn" @onclick="@ModalCancel">Cancel</button>
+                    <button type="button" disabled="@(yearToCreate == 0)" class="btn btn-primary" @onclick=@(args => ModalOk())>Criar</button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+}
+@code {
+    bool isLoading;
+    public int yearToCreate;
+    public IEnumerable<Year>? years { get; set; }
+
+    public class YearOption
+    {
+        public int Year { get; set; }
+        public string YearRange { get; set; }
+    }
+
+    public List<YearOption> yearsDropDownList = new List<YearOption>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        isLoading = true;
+        years = YearService.GetYears().OrderByDescending(years => years.YearId);
+        // 2-year range list of the current year, without existing years
+        yearsDropDownList = Enumerable.Range(DateTime.Now.Year - 2, 5)
+                              .Select(year => new YearOption { Year = year, YearRange = year.ToString() + "/" + (year + 1).ToString() })
+                              .Where(yearOption => !years.Any(year => year.YearId == yearOption.Year))
+                              .ToList();
+        isLoading = false;
+    }
+
+    bool showModal = false;
+
+    void ModalShow() => showModal = true;
+    void ModalCancel() => showModal = false;
+    async Task ModalOk()
+    {
+        // criar ano na base de dados
+        YearService.CreateYear(yearToCreate);
+        showModal = false;
+        // update tabela
+        years = YearService.GetYears().OrderByDescending(years => years.YearId);
+        yearsDropDownList.RemoveAll(y => y.Year == yearToCreate);
+        // lançar alerta de acordo com o que aconteceu
+        NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Criado com sucesso", Detail = "O ano " + yearToCreate + " foi criado!", Duration = 5000 });
+
+    }
+
+    public void GoToYear(int yearId)
+    {
+        Navigation.NavigateTo($"./manager/year/{yearId}");
+    }
+
+}

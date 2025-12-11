@@ -1,0 +1,119 @@
+﻿@page "/manager/admin"
+
+@using TutoringApp.Data
+@using TutoringApp.Models
+@using TutoringApp.Services
+@inject IUserService UserService
+@inject DialogService DialogService
+@inject NavigationManager Navigation
+@inject NotificationService NotificationService
+
+@attribute [Authorize(Roles = "Admin")]
+
+<PageTitle>Gerir gestores</PageTitle>
+
+<h1>Gestores</h1>
+
+<RadzenTemplateForm TItem="User" Data="@user" Submit=@AddNewManager class="mb-4">
+    <div style="display: flex; align-items: start;">
+        <div style="margin-right: 10px;">
+            <RadzenTextBox @bind-Value=@user.Username Name="Username do gestor" Placeholder="Username do gestor" />
+            <RadzenRequiredValidator Component="Username do gestor" Text="É obrigatório inserir o username do gestor" Style="display: block; margin-top: 5px;" />
+        </div>
+        <div>
+            <RadzenButton Text="Adicionar gestor" ButtonType="ButtonType.Submit" IsBusy="@loadingButton"></RadzenButton>
+        </div>
+    </div>
+</RadzenTemplateForm>
+<RadzenDataGrid @ref="grid" AllowAlternatingRows="false" AllowFiltering="true" AllowPaging="true" PageSize="10" AllowSorting="true" EditMode="DataGridEditMode.Single"
+                Data="usersManager" TItem="ApplicationUser">
+    <Columns>
+        <RadzenDataGridColumn TItem="ApplicationUser" Property="Username" Title="Username" />
+        <RadzenDataGridColumn TItem="ApplicationUser" Property="FirstName" Title="Nome" />
+        <RadzenDataGridColumn TItem="ApplicationUser" Property="LastName" Title="Apelido" />
+        <RadzenDataGridColumn TItem="ApplicationUser" Property="Email" Title="Email" />
+        <RadzenDataGridColumn TItem="ApplicationUser" Filterable="false" Sortable="false" TextAlign="TextAlign.Right" >
+            <Template Context="data">
+                <RadzenButton title="Remover função" ButtonStyle="ButtonStyle.Danger" Icon="delete" Variant="Variant.Flat" Shade="Shade.Lighter" Size="ButtonSize.Medium" Click="@(args => RemoveRoleConfirmDialog(data))" @onclick:stopPropagation="true" />
+            </Template>
+        </RadzenDataGridColumn>
+    </Columns>
+</RadzenDataGrid>
+
+<br />
+
+<h1>Adminstradores</h1>
+
+<RadzenDataGrid @ref="grid" AllowAlternatingRows="false" AllowFiltering="true" AllowPaging="true" PageSize="10" AllowSorting="true" EditMode="DataGridEditMode.Single"
+                Data="usersAdmin" TItem="ApplicationUser">
+    <Columns>
+        <RadzenDataGridColumn TItem="ApplicationUser" Property="Username" Title="Username" />
+        <RadzenDataGridColumn TItem="ApplicationUser" Property="FirstName" Title="Nome" />
+        <RadzenDataGridColumn TItem="ApplicationUser" Property="LastName" Title="Apelido" />
+        <RadzenDataGridColumn TItem="ApplicationUser" Property="Email" Title="Email" />
+    </Columns>
+</RadzenDataGrid>
+<br/>
+<p>Para a gestão dos administradores contacte os Serviços de Sistemas de Informação e Comunicações da UTAD.</p>
+
+@code {
+    RadzenDataGrid<ApplicationUser> grid;
+    List<ApplicationUser>? usersManager { get; set; }
+    List<ApplicationUser>? usersAdmin { get; set; }
+
+    public class User
+    {
+        public string Username { get; set; }
+
+    }
+    User user = new User();
+    private bool loadingButton;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        usersManager = UserService.GetUsersManager();
+        usersAdmin = UserService.GetUsersAdmin();
+    }
+
+    public async Task AddNewManager()
+    {
+        this.loadingButton = true;
+        try
+        {
+            await UserService.AddRoleManager(this.user.Username);
+            usersManager = UserService.GetUsersManager();
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Role atualizada com sucesso", Detail = "O utilizador " + this.user.Username + " é agora Gestor!", Duration = 5000 });
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Erro!", Detail = "O utilizador " + this.user.Username + " não existe.", Duration = 5000 });
+        }
+        this.user.Username = "";
+        StateHasChanged(); // Notifies Blazor that the component's state has changed and needs to be re-rendered
+        this.loadingButton = false;
+    }
+    async Task RemoveRole(ApplicationUser user)
+    {
+        await UserService.DeleteRoleManager(user);
+        NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Removido com sucesso!", Detail = "O utilizador " + user.FirstName + " já não exerce funções de gestor." , Duration = 5000 });
+
+        // Update data table
+        usersManager = UserService.GetUsersManager();
+        StateHasChanged(); // Notifies Blazor that the component's state has changed and needs to be re-rendered
+    }
+    async Task RemoveRoleConfirmDialog(ApplicationUser user)
+    {
+        var result = await DialogService.OpenAsync("Remover função", ds =>
+    @<div>
+        <p class="mb-4">Pretende <b>remover</b> @user.UserName de gestor?</p>
+        <div class="row">
+            <div class="col">
+                <RadzenButton Text="Eliminar" Click="() => {ds.Close(true);RemoveRole(user);}" ButtonStyle="ButtonStyle.Danger" Class="me-1" />
+                <RadzenButton Text="Cancelar" Click="() => ds.Close(false)" ButtonStyle="ButtonStyle.Light" Class="me-1" />
+            </div>
+        </div>
+    </div>
+    );
+    }
+}

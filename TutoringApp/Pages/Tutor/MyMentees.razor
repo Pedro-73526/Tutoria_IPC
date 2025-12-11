@@ -1,0 +1,109 @@
+﻿@page "/groups"
+
+@using TutoringApp.Models
+@using TutoringApp.Services
+@inject NavigationManager Navigation
+@inject IGroupService GroupService
+@inject ICourseService CourseService
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+@attribute [Authorize(Roles = "Tutor")]
+
+<PageTitle>Tutorandos</PageTitle>
+
+<h3>Meus tutorandos</h3>
+
+@if (myMentee == null)
+{
+    <p><em>Loading...</em></p>
+}
+else 
+{
+    <RadzenButton ButtonStyle="ButtonStyle.Primary" Icon="add_circle_outline" Class="mt-2 mb-4" Text="Registar reunião de grupo" Click="CreateGroupMeeting"
+                  Disabled="@(selectedEnrollments == null || !selectedEnrollments.Any())" />
+
+    <RadzenDataGrid @ref="grid" Data="@myMentee" IsLoading=@isLoading EmptyText="Ainda não lhe foram atribuídos tutorandos" PageSize="15" AllowPaging="true"
+                    ShowPagingSummary="true" SelectionMode="DataGridSelectionMode.Multiple" @bind-Value=@selectedEnrollments AllowRowSelectOnRowClick="false">
+        <Columns>
+            <RadzenDataGridColumn TItem="(Enrollement,int,string)" Width="60px" Sortable="false" Filterable="false">
+                <HeaderTemplate>
+                    <RadzenCheckBox TriState="false" TValue="bool" Value="@(myMentee.Any(i => selectedEnrollments != null && selectedEnrollments.Contains(i)))"
+                                    Change="@(args => selectedEnrollments = args ? myMentee.ToList() : null)" />
+                </HeaderTemplate>
+                <Template Context="data">
+                    <RadzenCheckBox TriState="false" Value="@(selectedEnrollments != null && selectedEnrollments.Contains(data))"
+                                    TValue="bool" Change=@(args => OnRowCheckboxChanged(data, args)) />
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="(Enrollement,int,string)" Title="Nome" FormatString="{0:d}">
+                <Template Context="data">
+                    <RadzenImage Path="./user.png" style="width: 40px; height: 40px; border-radius: 8px; margin-right: 8px; float: left;" />
+                    <RadzenText TextStyle="TextStyle.Subtitle2" Class="mb-0">@data.Item1.User?.FirstName @data.Item1.User?.LastName</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Caption">al @data.Item1.User?.NumberMec</RadzenText>
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="(Enrollement,int,string)" Title="Curso">
+                <Template>
+                    @context.Item1.Course.CourseName
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="(Enrollement,int,string)" Title="Última reunião">
+                <Template>
+                    @context.Item3
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="(Enrollement,int,string)" Title="Ações">
+                <Template Context="data">
+                    <RadzenButton ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Size="ButtonSize.Medium" Click="() => GoToGroup(data.Item2)">
+                        Ver
+                    </RadzenButton>
+                </Template>
+            </RadzenDataGridColumn>
+        </Columns>
+    </RadzenDataGrid>
+}
+
+
+
+@code {
+    RadzenDataGrid<(Enrollement, int, string)>? grid;
+    bool isLoading;
+    List<(Enrollement Enrollement, int GroupId, string lastMeeting)> myMentee = new List<(Enrollement, int, string)>();
+    IList<(Enrollement, int, string)> selectedEnrollments = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        await base.OnInitializedAsync();
+        myMentee = await GroupService.GetMenteesGroup();
+        isLoading = false;
+    }
+
+    public async Task CreateGroupMeeting()
+    {
+        var result = await DialogService.OpenAsync<Dialogs.CreateMeetingComponent>($"Nova reunião de grupo",
+            new Dictionary<string, object>() { { "GroupId", null }, { "Enrollments", selectedEnrollments } },
+            new DialogOptions() { Width = "700px", Height = "450px", Resizable = true, Draggable = true });
+
+        if (result != null)
+        {
+            // Notify the creation of the new meeting
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Criado com sucesso", Detail = "Registou " + result + " novas reuniões!", Duration = 5000 });
+
+        }
+    }
+
+    private void OnRowCheckboxChanged((Enrollement, int, string) data, bool isSelected)
+    {
+        selectedEnrollments ??= new List<(Enrollement, int, string)>();
+        if (isSelected && !selectedEnrollments.Contains(data)) selectedEnrollments.Add(data); else if (!isSelected && selectedEnrollments.Contains(data)) selectedEnrollments.Remove(data);
+    }
+
+
+
+    public void GoToGroup(int groupId)
+    {
+        Navigation.NavigateTo($"./group/{groupId}");
+    }
+}

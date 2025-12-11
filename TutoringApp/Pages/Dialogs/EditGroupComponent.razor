@@ -1,0 +1,142 @@
+﻿@using TutoringApp.Models
+@using TutoringApp.Services
+
+@inject IMeetingService MeetingService
+@inject IEnrollementService EnrollementService
+@inject IGroupService GroupService
+@inject DialogService dialogService
+@inject NotificationService NotificationService
+
+<div style="min-height: 100%;position:relative;">
+    <div style="padding-bottom: 50px;">
+        <div class="row pb-2">
+            <div class="col">
+                <div class="align-items-baseline d-flex">
+                    <RadzenText TextStyle="TextStyle.Overline">Tutorando</RadzenText>
+                </div>
+                <div>
+                    <RadzenText>@customGroup.Mentee.User.FirstName @customGroup.Mentee.User.LastName</RadzenText>
+                </div>
+                <div>
+                    <RadzenText>@customGroup.Mentee.User.Email</RadzenText>
+                </div>
+            </div>
+            <div class="col">
+                <div class="align-items-baseline d-flex">
+                    <RadzenText TextStyle="TextStyle.Overline">Escola/Curso</RadzenText>
+                </div>
+                <div>
+                    <RadzenText>@customGroup.Mentee.Course.School</RadzenText>
+                </div>
+                <div>
+                    <RadzenText>@customGroup.Mentee.Course.CourseName</RadzenText>
+                </div>
+            </div>
+        </div>
+        <hr/>
+        <div class="row py-2">
+            <div class="col">
+                <div class="align-items-baseline d-flex">
+                    <RadzenText TextStyle="TextStyle.Overline">Tutor</RadzenText>
+                </div>
+                <div>
+                    <RadzenText>@customGroup.Tutor.User.FirstName @customGroup.Tutor.User.LastName</RadzenText>
+                </div>
+                <div>
+                    <RadzenText>@customGroup.Tutor.User.Email</RadzenText>
+                </div>
+            </div>
+            <div class="col">
+                <div class="align-items-baseline d-flex">
+                    <RadzenText TextStyle="TextStyle.Caption">Alterar para:</RadzenText>
+                </div>
+                <div>
+                    <RadzenDropDown TValue="int" Data=@tutors TextProperty="User.Email" ValueProperty="Id" AllowClear=true AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Alterar tutor" Style="width: 100%; max-width: 400px;" Change=@(args => OnChangeTutor(args)) />
+                </div>
+            </div>
+        </div>
+        <hr />
+        <div class="row py-2">
+            <div class="col">
+                <div class="align-items-baseline d-flex">
+                    <RadzenText TextStyle="TextStyle.Overline">Mentor</RadzenText>
+                </div>
+                @if (customGroup.Mentor.Role != null)
+                {
+                    <div>
+                        <RadzenText>@customGroup.Mentor.User.FirstName @customGroup.Mentor.User.LastName</RadzenText>
+                    </div>
+                    <div>
+                        <RadzenText>@customGroup.Mentor.User.Email</RadzenText>
+                    </div>
+                }
+                else
+                {
+                    <RadzenText>Sem mentor</RadzenText>
+                }
+            </div>
+            <div class="col">
+                <div class="align-items-baseline d-flex">
+                    <RadzenText TextStyle="TextStyle.Caption">Alterar para:</RadzenText>
+                </div>
+                <div>
+                    <RadzenDropDown TValue="int" Data=@mentors TextProperty="User.Email" ValueProperty="Id" AllowClear=true AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Alterar mentor" Style="width: 100%; max-width: 400px;" Change=@(args => OnChangeMentor(args)) />
+                </div>
+            </div>
+        </div>
+    </div>
+    @if(selectedTutor != 0 || selectedMentor != 0)
+    {
+        <div class="col">
+            <RadzenButton Text="Editar"
+                        ButtonStyle="ButtonStyle.Primary"
+                        Class="me-1"
+                        Click="@Submit" />
+            <RadzenButton Text="Cancelar"
+                        ButtonStyle="ButtonStyle.Light"
+                        Class="me-1"
+                        Click="@((args) => dialogService.Close())" />
+        </div>
+    }
+</div>
+
+
+@code {
+    [Parameter]
+    public CustomGroup customGroup { get; set; }
+
+    int? value;
+    IEnumerable<Enrollement> tutors;
+    IEnumerable<Enrollement> mentors;
+
+    public int selectedTutor { get; set; }
+    public int selectedMentor { get; set; }
+
+
+    //public Meeting originalMeeting { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        tutors = EnrollementService.GetEnrollementsByRole(customGroup.Mentee.YearId, "Tutor", customGroup.Course.CourseId);
+        // Remove current tutor from collection
+        tutors = tutors.Where(t => t.Id != customGroup.Tutor.Id);
+        mentors = EnrollementService.GetEnrollementsByRole(customGroup.Mentee.YearId, "Mentor", customGroup.Course.CourseId);
+        // Remove current mentor from collection
+        mentors = mentors.Where(m => m.Id != customGroup.Mentor.Id);
+    }
+    void OnChangeTutor(object value)
+    {
+        selectedTutor = Convert.ToInt32(value);
+    }
+    void OnChangeMentor(object value)
+    {
+        selectedMentor = Convert.ToInt32(value);
+    }
+    void Submit()
+    {
+        GroupService.UpdateGroupMembers(customGroup.GroupId, selectedTutor, selectedMentor);
+        NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Atualizado com sucesso", Detail = "O grupo foi atualizado! Refresh a página", Duration = 5000 });
+        dialogService.Close();
+    }
+}

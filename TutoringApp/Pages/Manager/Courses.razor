@@ -1,0 +1,47 @@
+﻿@page "/manager/courses"
+
+@using TutoringApp.Models
+@using TutoringApp.Services
+@inject ICourseService CourseService
+@inject DialogService DialogService
+@inject NavigationManager Navigation
+@inject NotificationService NotificationService
+
+@attribute [Authorize(Roles = "Manager,Admin")]
+
+<PageTitle>Gerir cursos</PageTitle>
+
+<h1>Cursos</h1>
+
+<RadzenButton ButtonStyle="ButtonStyle.Primary" Icon="cached" Class="mt-2 mb-4" Text="Atualizar cursos" Click="@UpdateCourses" />
+<RadzenDataGrid @ref="grid" AllowAlternatingRows="false" AllowFiltering="true" AllowPaging="true" PageSize="15" AllowSorting="true" EditMode="DataGridEditMode.Single"
+                Data="@courses" TItem="Course">
+    <Columns>
+        <RadzenDataGridColumn TItem="Course" Property="CourseCode" Title="Código do curso" Width="120px" />
+        <RadzenDataGridColumn TItem="Course" Property="CourseName" Title="Nome" Width="280px" />
+        <RadzenDataGridColumn TItem="Course" Property="School" Title="Escola" Width="120px" />
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+    RadzenDataGrid<Course> grid;
+    IEnumerable<Course>? courses { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        courses = CourseService.GetCourses().OrderBy(c => c.CourseCode);
+    }
+
+    public async Task UpdateCourses()
+    {
+        int numberOfCoursesAdded = await CourseService.UpdateCourses();
+        if (numberOfCoursesAdded > 0)
+        {
+            courses = CourseService.GetCourses().OrderBy(c => c.CourseCode);
+            StateHasChanged(); // Notifies Blazor that the component's state has changed and needs to be re-rendered
+        }
+        NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Atualizado com sucesso", Detail = "Foram adicionados " + numberOfCoursesAdded + " novos cursos.", Duration = 5000 });
+
+    }
+}

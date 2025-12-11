@@ -1,0 +1,24 @@
+﻿@inherits LayoutComponentBase
+
+<PageTitle>TutoringApp</PageTitle>
+
+<RadzenDialog/>
+<RadzenNotification/>
+<RadzenContextMenu/>
+<RadzenTooltip/>
+
+<div class="page">
+    <div class="sidebar" style="background:white">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row px-4 auth">
+            <LoginDisplay />
+        </div>
+
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>

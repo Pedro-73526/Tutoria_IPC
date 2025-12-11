@@ -1,0 +1,18 @@
+﻿@inject IWebHostEnvironment Environment
+
+<AuthorizeView>
+    <Authorized>
+        <p class="m-0">Olá, @context.User.Identity?.Name!</p>
+        <form method="post" action="Identity/Account/LogOut">
+            <button type="submit" class="nav-link btn btn-link">Sair</button>
+        </form>
+    </Authorized>
+    <NotAuthorized>
+        <a href="login">Entrar</a>
+
+        @if (Environment.IsDevelopment())
+        {
+            <a href="Identity/Account/Login">Entrar localmente</a>
+        }
+    </NotAuthorized>
+</AuthorizeView>

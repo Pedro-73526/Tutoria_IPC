@@ -1,0 +1,130 @@
+﻿@using TutoringApp.Models
+@using TutoringApp.Services
+
+@inject IMeetingService MeetingService
+@inject IGroupService GroupService
+@inject DialogService dialogService
+@inject NotificationService NotificationService
+
+<div style="min-height: 100%;position:relative;">
+    <div style="padding-bottom: 50px;">
+        <div class="row pb-2">
+            <div class="col">
+                <div class="align-items-baseline d-flex">
+                    <RadzenLabel Text="Data" />
+                </div>
+                <div>
+                    <RadzenDatePicker @bind-Value=@meeting.Date
+                                      DateFormat="d"
+                                      Max="DateTime.Today"
+                                      Class="w-100 mt-2" />
+                </div>
+            </div>
+            <div class="col">
+                <div class="align-items-baseline d-flex">
+                    <RadzenLabel Text="Tipo de contacto" />
+                </div>
+                <div>
+                    <RadzenDropDown @bind-Value="meeting.TypeContact"
+                                    AllowClear="true"
+                                    Placeholder="Selecione uma opção"
+                                    Data="@cards"
+                                    Class="w-100">
+                    </RadzenDropDown>
+                </div>
+            </div>
+        </div>
+        <div class="row py-2">
+            <div class="align-items-baseline d-flex col-md-3">
+                <RadzenLabel Text="Assunto" />
+            </div>
+            <div class="col-md-9">
+                <RadzenDropDown @bind-Value="meeting.Subject"
+                                AllowClear="true"
+                                Placeholder="Selecione um assunto"
+                                Data="@subjectDropDown"
+                                Class="w-100">
+                </RadzenDropDown>
+            </div>
+        </div>
+        <div class="row py-2">
+            <div class="align-items-baseline d-flex col-md-3">
+                <RadzenLabel Text="Descrição" />
+            </div>
+            <div class="col-md-9">
+                <RadzenTextArea @bind-Value="meeting.Description"
+                                Placeholder="Descrição da reunião"
+                                style="width: 100%;"
+                                Name="Descrição" />
+            </div>
+        </div>
+    </div>
+    @if (isCorrectTutor)
+    {
+        <div class="col">
+            <RadzenButton Text="Editar"
+                          Disabled="@MeetingIsUnchanged"
+                          ButtonStyle="ButtonStyle.Primary"
+                          Class="me-1"
+                          Click="@Submit" />
+            <RadzenButton Text="Cancelar"
+                          ButtonStyle="ButtonStyle.Light"
+                          Class="me-1"
+                          Click="@((args) => dialogService.Close())" />
+        </div>
+    }
+</div>
+
+
+@code {
+    [Parameter]
+    public Meeting meeting { get; set; }
+
+    public Meeting originalMeeting { get; set; }
+
+    bool isCorrectTutor;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isCorrectTutor = await GroupService.IsPermission(meeting.GroupId);
+        await base.OnInitializedAsync();
+        originalMeeting = new Meeting
+        {
+            Date = meeting.Date,
+            TypeContact = meeting.TypeContact,
+            Subject = meeting.Subject,
+            Description = meeting.Description,
+        };
+    }
+
+    List<string> cards = new List<string>
+    {
+        "Reunião presencial individual","Reunião presencial em grupo","Videoconferência","Email","Telefone","SMS", "Outro"
+    };
+
+    List<string> subjectDropDown = new List<string>
+    {
+        "Informações gerais",
+        "Dificuldades na integração",
+        "Funcionamento do curso",
+        "Funcionamento dos Serviços da UTAD",
+        "Necessidade de apoio psicológico",
+        "Dificuldades económicas",
+        "Dificuldades em acompanhar as matérias lecionadas",
+        "Dificuldade na planificação e gestão do estudo",
+        "Dificuldade na planificação e preparação dos exames",
+        "Avaliação",
+        "Assiduidade e pontualidade às aulas",
+        "Outro",
+    };
+
+    void Submit()
+    {
+        MeetingService.UpdateMeeting(meeting);
+        dialogService.Close();
+    }
+    private bool MeetingIsUnchanged => meeting.Description == originalMeeting.Description
+                                    && meeting.Subject == originalMeeting.Subject
+                                    && meeting.TypeContact == originalMeeting.TypeContact
+                                    && meeting.Date == originalMeeting.Date;
+}

@@ -1,0 +1,250 @@
+﻿@page "/manager/year/{YearId:int}/groups"
+
+@using TutoringApp.Models
+@using TutoringApp.Services
+@inject IJSRuntime JS
+@inject ICourseService CourseService
+@inject IYearService YearService
+@inject IGroupService GroupService
+@inject IExcelService ExcelService
+@inject DialogService DialogService
+@inject NavigationManager Navigation
+@inject NotificationService NotificationService
+
+@attribute [Authorize(Roles = "Manager,Admin")]
+
+<PageTitle>Gerir grupos</PageTitle>
+
+<RadzenButton ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Click="() => GoBack()" Icon="arrow_back" Class="mt-2 mb-4" Text="Voltar" />
+
+<RadzenCard>
+    <div class="d-flex flex-row">
+        <div class="col-md-8">
+            <h3>Gerir grupos: @year.YearAcademic</h3>
+        </div>
+    </div>
+</RadzenCard>
+<br/>
+<RadzenCard>
+    <RadzenText TextStyle="TextStyle.Subtitle1" Text="Serão atribuídos a um novo grupo os tutorandos do curso selecionado que não pertencem a nenhum grupo."></RadzenText>
+    <div class="row" style="display: flex; align-items: center">
+        <div class="col-md-8">
+            <RadzenDropDown AllowClear="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" AllowFiltering="true"
+                            TValue="int" Placeholder="Selecione um curso"
+                            TextProperty="CourseName" ValueProperty="CourseId"
+                            Data="@courses" Change=@(args => OnChange(args))
+                            Class="w-100">
+            </RadzenDropDown>
+        </div>
+        <div class="col-md-4">
+            <RadzenButton IsBusy=@busyButton Click="() => Create()" ButtonStyle="ButtonStyle.Info">Criar grupos automaticamente</RadzenButton>
+        </div>
+    </div>
+</RadzenCard>
+<br />
+<RadzenButton ButtonStyle="ButtonStyle.Success" Text="Download XLSX" Icon="grid_on" Click="@(args => ExportExcelFile())" Class="mb-4 me-2" />
+<RadzenButton ButtonStyle="ButtonStyle.Info" Text="Criar grupo" Icon="groups" Click="@(args => CreateGroup(YearId))" Class="mb-4 me-2" />
+<RadzenDataGrid @ref="grid" Data="@data" AllowAlternatingRows="false" AllowFiltering="true" AllowPaging="true" 
+    FilterMode="FilterMode.Advanced" PageSize="20" AllowSorting="true" class="mb-3">
+    <Columns>
+        <RadzenDataGridColumn TItem="CustomGroup" Title="Tutorando" Property="Mentee.User.Email">
+            <Template Context="data">
+                <RadzenText TextStyle="TextStyle.Subtitle2" Class="mb-0">@data.Mentee.User.FirstName @data.Mentee.User.LastName</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption">@data.Mentee.User.Email</RadzenText>
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="CustomGroup" Title="Tutor" Property="Tutor.User.Email">
+            <Template Context="data">
+                <RadzenText TextStyle="TextStyle.Subtitle2" Class="mb-0">@data.Tutor.User.FirstName @data.Tutor.User.LastName</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption">@data.Tutor.User.Email</RadzenText>
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="CustomGroup" Title="Mentor" Property="Mentor.User.Email" >
+            <Template Context="data">
+                @if (data.Mentor.User != null)
+                {
+                    <RadzenText TextStyle="TextStyle.Subtitle2" Class="mb-0">@data.Mentor.User.FirstName @data.Mentor.User.LastName</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Caption">@data.Mentor.User.Email</RadzenText>
+                }
+                else
+                {
+                    <RadzenText TextStyle="TextStyle.Subtitle1">Sem mentor</RadzenText>
+                }
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="CustomGroup" Title="Curso" Property="Course.CourseName">
+            <Template Context="data">
+                @data.Course.CourseName
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="CustomGroup" Title="Nº reuniões" Property="NumMeetings">
+            <Template Context="data">
+                @data.NumMeetings
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="CustomGroup" Filterable="false" Sortable="false" TextAlign="TextAlign.Right" Width="156px">
+            <Template Context="data">
+                <RadzenButton Icon="visibility" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Size="ButtonSize.Medium" Click="@(args => GoToGroup(data.GroupId))" />
+                <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Size="ButtonSize.Medium" title="Editar" Class="my-1" Click="@(args => EditGroup(data))" @onclick:stopPropagation="true" />
+                <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="delete" Variant="Variant.Flat" Shade="Shade.Lighter" Size="ButtonSize.Medium" Click="@(args => DeleteGroupConfirmDialog(data.GroupId))" @onclick:stopPropagation="true" />
+            </Template>
+        </RadzenDataGridColumn>
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+    [Parameter]
+    public int YearId { get; set; }
+
+    RadzenDataGrid<CustomGroup> grid;
+
+    public IEnumerable<Course> courses { get; set; }
+    public List<Models.Group> groups { get; set; }
+
+    // To be able to filter
+    public List<CustomGroup> data { get; set; }
+    byte[] fileStream;
+
+    // To get year details
+    public Year year { get; set; }
+
+    public int selectedCourse { get; set; }
+    bool busyButton;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        courses = CourseService.GetCourses().ToList();
+        year = YearService.GetYear(YearId);
+        groups = GroupService.GetGroups(YearId).ToList();
+        data = Datagrid();
+    }
+
+    public async Task EditGroup(CustomGroup customGroup)
+    {
+        await DialogService.OpenAsync<Dialogs.EditGroupComponent>($"Editar grupo",
+        new Dictionary<string, object>() { { "CustomGroup", customGroup } },
+            new DialogOptions() { Width = "750px", Height = "550px", Resizable = true, Draggable = true });
+        // if the result exist it means that the meeting has been created
+        // so, we need to update datagrid
+        grid.Reload();
+    }
+
+    async Task DeleteGroup(int groupId)
+    {
+        await GroupService.DeleteGroup(groupId);
+        NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Eliminado com sucesso", Detail = "O grupo foi eliminado!", Duration = 5000 });
+        
+        // Update data table
+        data = data.Where(d => d.GroupId != groupId).ToList();
+        StateHasChanged();
+    }
+    async Task DeleteGroupConfirmDialog(int groupId)
+    {
+        var result = await DialogService.OpenAsync("Eliminar grupo", ds =>
+    @<div>
+        <p class="mb-4">Pretende <b>eliminar</b> este grupo?</p>
+        <div class="row">
+            <div class="col">
+                <RadzenButton Text="Eliminar" Click="() => ds.Close(true)" ButtonStyle="ButtonStyle.Danger" Class="me-1" />
+                <RadzenButton Text="Cancelar" Click="() => ds.Close(false)" ButtonStyle="ButtonStyle.Light" Class="me-1" />
+            </div>
+        </div>
+        </div>
+    );
+        if (result == true)
+        {
+            await DeleteGroup(groupId);
+        }
+    }
+
+    // Based on https://learn.microsoft.com/en-us/aspnet/core/blazor/file-downloads?view=aspnetcore-7.0
+    async Task ExportExcelFile()
+    {
+        fileStream = ExcelService.ExportGroupsTable(grid.View);
+        string fileName = "grupos" + YearId.ToString() + ".xlsx";
+        await JS.InvokeVoidAsync("DownloadFile", fileStream, fileName);
+    }
+
+    public async Task CreateGroup(int yearId)
+    {
+        await DialogService.OpenAsync<Dialogs.CreateGroupComponent>($"Criar grupo",
+            new Dictionary<string, object>() { { "yearId", yearId } },
+            new DialogOptions() { Width = "750px", Height = "550px", Resizable = true, Draggable = true });
+        // if the result exist it means that the meeting has been created
+    }
+
+    void OnChange(object value)
+    {
+        selectedCourse = Convert.ToInt32(value);
+    }
+    public async Task Create()
+    {
+        busyButton = true;
+        if(selectedCourse != 0)
+        {
+            try
+            {
+                var result = await GroupService.CreateGroupsAuto(selectedCourse, YearId);
+                NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Criado com sucesso!", Detail = "Foram criados " + result + " grupos", Duration = 5000 });
+                groups = GroupService.GetGroups(YearId).ToList();
+            }
+            catch (Exception ex)
+            {
+                NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Erro!", Detail = ex.Message, Duration = 5000 });
+
+            }
+            data = Datagrid();
+        }
+        else
+        {
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Selecione um curso!", Detail = "Deverá selecionar um curso para criar automaticamente os grupos.", Duration = 5000 });
+        }
+        busyButton = false;
+    }
+    public void GoBack()
+    {
+        Navigation.NavigateTo($"./manager/year/{YearId}");
+    }
+    public void GoToGroup(int groupId)
+    {
+        Navigation.NavigateTo($"./group/{groupId}");
+    }
+
+    // due to it not being possible to filter data from the datagrid with a custom template, 
+    // I have to shape the data to use in the datagrid to be able to filter and sort
+    List<CustomGroup> Datagrid()
+    {
+        var data = new List<CustomGroup>();
+
+        foreach(var group in groups)
+        {
+            Enrollement tutor = new Enrollement();
+            Enrollement mentor = new Enrollement();
+            Enrollement mentee = new Enrollement();
+            Course course = new Course();
+            if (group.Enrollements != null)
+            {
+                if(group.Enrollements.Any(e => e.Role == "Tutor"))
+                {
+                    tutor = group.Enrollements.FirstOrDefault(e => e.Role == "Tutor");
+                }
+                if(group.Enrollements.Any(e => e.Role == "Mentor"))
+                {
+                    mentor = group.Enrollements.FirstOrDefault(e => e.Role == "Mentor");
+                }
+                if (group.Enrollements.Any(e => e.Role == "Tutorando"))
+                {
+                    mentee = group.Enrollements.FirstOrDefault(e => e.Role == "Tutorando");
+                    course = mentee.Course;
+                }
+                int numMeetings = group.Meetings.Count;
+                int groupId = group.GroupId;
+
+                CustomGroup CustomGroup = new CustomGroup(tutor, mentor, mentee, course, numMeetings, groupId);
+                data.Add(CustomGroup);
+            }
+        }
+        return data;
+    }
+}

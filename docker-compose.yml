@@ -1,0 +1,46 @@
+version: '3.4'
+
+services:
+  tutoringapp:
+    image: tutoringapp:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    environment:
+      # Override ConnectionStrings using double underscore (__) for nesting
+      - ConnectionStrings__DefaultConnection=Server=db;Database=TutoringPlatform;User ID=sa;Password=Ken01!LSI;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True
+      - ConnectionStrings__TutoringAppContextConnection=Server=db;Database=TutoringApp;User ID=sa;Password=Ken01!LSI;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True
+      
+      # Override root level settings
+      - WS_GetDocente=http://mock-quovadis/MS/RCU/v1/Utilizadores/Get?username=
+      - WS_GetStudentIUPI=http://mock-quovadis/MS/Estudante_IUPI_RCU_S/
+      - WS_GetStudentByIUPI=http://mock-quovadis/MS/Estudante_Perfis_RCU_S/
+      - WS_GetCourses=http://mock-quovadis/MS/SIGAcad/v1/Cursos/List
+      - WS_Authentication=http://mock-quovadis/MS/IUTADAuth
+      - Quovadis_Username=dummy
+      - Quovadis_Password=dummy
+      # - WS_GetPredict=http://predict.eduia.utad.pt/api/students/
+      # - EDUIA_Username=admin
+      # - EDUIA_Password=eduadmin123
+    restart: always
+    depends_on:
+      - mock-quovadis
+      - db
+
+  mock-quovadis:
+    image: mock-quovadis:latest
+    build:
+      context: .
+      dockerfile: MockServices/Dockerfile
+    ports:
+      - "5000:80"
+
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=Ken01!LSI
+    ports:
+      - "1433:1433"

@@ -1,0 +1,176 @@
+﻿@page "/manager/year/{YearId:int}"
+@using TutoringApp.Services;
+@using TutoringApp.Models;
+@using OfficeOpenXml;
+@using OfficeOpenXml.Style;
+
+@inject IJSRuntime JS
+@inject IEnrollementService EnrollementService
+@inject IYearService YearService
+@inject IExcelService ExcelService
+@inject NavigationManager Navigation
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+
+
+@attribute [Authorize(Roles = "Manager,Admin")]
+
+<RadzenButton ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Click="() => GoBack()" Icon="arrow_back" Class="mt-2 mb-4" Text="Voltar" />
+@if (!year.IsActive)
+{
+    <RadzenButton ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" Icon="" Class="mt-2 mb-4" Text="Tornar ativo" Click="()=>YearService.MakeItActive(YearId)" />
+}
+
+<RadzenCard>
+    <div class="d-flex flex-row">
+        <div class="col-md-8">
+            <h3>Ano letivo: @year.YearAcademic</h3>
+        </div>
+    </div>
+</RadzenCard>
+<br />
+
+<RadzenCard>
+    <div class="d-flex flex-row">
+        <div class="col-md-6">
+            <RadzenText Text="Para adicionar grande quantidade de utilizadores a este ano letivo, use o seguinte template:" />
+            <RadzenButton ButtonStyle="ButtonStyle.Success" Click="ExportExcelFile" Text="Template XLSX" Icon="grid_on" Class="mb-4 me-2" />
+            <RadzenText Text="Dê upload do ficheiro excel (.xlsx) preenchido." />
+            <InputFile OnChange="@ImportExcelFile" multiple="false" accept=".xlsx"></InputFile>
+        </div>
+    </div>
+</RadzenCard>
+
+<div class="d-flex flex-row pt-4">
+    @foreach(var item in users)
+    {
+        <div class="col" style="width: 120px; @(item == users.Last() ? "margin-right: 0" : "margin-right: 16px")">
+            <RadzenCard>
+                <RadzenText TextAlign="TextAlign.Center" TextStyle="TextStyle.DisplayH6">@item.Item1</RadzenText>
+                <RadzenText TextAlign="TextAlign.Center" TextStyle="TextStyle.Subtitle1">@item.Item2</RadzenText>
+            </RadzenCard>
+        </div>
+    }
+</div>
+
+<div class="d-flex flex-row py-4">
+    <div class="col">
+        <RadzenCard Style="height:100%; position:relative;">
+            <RadzenText TextStyle="TextStyle.DisplayH6">Inscrições</RadzenText>
+            <RadzenText TextStyle="TextStyle.Subtitle1">Total de inscrições: @infoYear.Item1</RadzenText>
+            <RadzenButton Style="bottom:16px; position:absolute;" Text="Gerir" ButtonStyle="ButtonStyle.Info" Variant="Variant.Flat" Click="() => GoToEnrollments()" />
+        </RadzenCard>
+    </div>
+    <div class="col mx-3">
+        <RadzenCard>
+            <RadzenText TextStyle="TextStyle.DisplayH6">Grupos</RadzenText>
+            <RadzenText TextStyle="TextStyle.Subtitle1">Total de grupos: @infoYear.Item2</RadzenText>
+            <RadzenText TextStyle="TextStyle.Subtitle1">Tutorandos sem grupo: @infoYear.Item3</RadzenText>
+            <RadzenButton Text="Gerir" ButtonStyle="ButtonStyle.Info" Variant="Variant.Flat" Click="() => GoToGroups()" />
+        </RadzenCard>
+    </div>
+    <div class="col">
+        <RadzenCard Style="height:100%">
+            <RadzenText TextStyle="TextStyle.DisplayH6">Reuniões</RadzenText>
+            <RadzenText TextStyle="TextStyle.Subtitle1">Total de reuniões registadas: @infoYear.Item4</RadzenText>
+            <RadzenText TextStyle="TextStyle.Subtitle1">Tutorandos sem reuniões: @infoYear.Item5</RadzenText>
+        </RadzenCard>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public int YearId { get; set; }
+
+    public Year year { get; set; }
+
+    List<(string, int)> users = new List<(string, int)>();
+
+    Tuple<int, int, int, int, int> infoYear { get; set; }
+
+    byte[] fileStream;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        year = YearService.GetYear(YearId);
+        users = EnrollementService.GetEnrollementsCount(YearId).Result;
+        infoYear = YearService.GetYearInfo(YearId).Result;
+    }
+
+    public void GoBack()
+    {
+        Navigation.NavigateTo("./manager/years");
+    }
+
+    // Based on https://learn.microsoft.com/en-us/aspnet/core/blazor/file-downloads?view=aspnetcore-7.0
+    async Task ExportExcelFile()
+    {
+        fileStream = ExcelService.CreateTemplate();
+        await JS.InvokeVoidAsync("DownloadFile", fileStream);
+    }
+
+    async Task ImportExcelFile(InputFileChangeEventArgs e)
+    {
+        List<Enrollement> NewEnrollments = new List<Enrollement>();
+        List<Enrollement> DuplicatedEnrollments = new List<Enrollement>();
+        List<int> NonExistentCourses = new List<int>();
+        InvokeAsync(async () =>
+        {
+            foreach (var file in e.GetMultipleFiles(1))
+            {
+                (NewEnrollments, DuplicatedEnrollments, NonExistentCourses) = await ExcelService.ReadExcel(file, YearId);
+            }
+
+            // Close the dialog
+            DialogService.Close();
+            OpenDialog(NewEnrollments, DuplicatedEnrollments, NonExistentCourses);
+        });
+
+        await BusyDialog();
+    }
+
+    public async Task OpenDialog(List<Enrollement> NewEnrollments, List<Enrollement> DuplicatedEnrollments, List<int> NonExistentCourses)
+    {
+        var result = await DialogService.OpenAsync<Dialogs.DialogConfirmExcelInput>($"Confirmar inscrições",
+            new Dictionary<string, object>() { { "NewEnrollments", NewEnrollments }, { "DuplicatedEnrollments", DuplicatedEnrollments }, { "NonExistentCourses", NonExistentCourses }, { "YearId", YearId } },
+            new DialogOptions() { Width = "1000px", Height = "650px", Resizable = true, Draggable = true });
+
+        NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Criado com sucesso", Detail = "Foram criadas " + result.Item1 + " novas inscrições!", Duration = 5000 });
+        if (result.Item2 >= 0)
+        {
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Erro", Detail = result.Item2 + " utilizadores não foram encontrados!", Duration = 10000 });
+        }
+
+        // Update table users
+        this.users = EnrollementService.GetEnrollementsCount(YearId).Result;
+        // Update year info
+        this.infoYear = YearService.GetYearInfo(YearId).Result;
+        StateHasChanged();
+    }
+
+    // Busy dialog from markup
+    async Task BusyDialog()
+    {
+        await DialogService.OpenAsync("", ds =>
+    @<div>
+        <div class="row">
+            <div class="col text-center p-5">
+                <div class="spinner mb-3"></div>
+                <b>A ler o ficheiro, por favor espere...</b>
+            </div>
+        </div>
+    </div>
+    , new DialogOptions() { ShowTitle = false, Style = "min-height:auto;min-width:auto;width:auto", CloseDialogOnEsc = false }
+        );
+    }
+
+    public void GoToGroups()
+    {
+        Navigation.NavigateTo($"./manager/year/{YearId}/groups");
+    }
+    public void GoToEnrollments()
+    {
+        Navigation.NavigateTo($"./manager/year/{YearId}/enrollments");
+    }
+}
