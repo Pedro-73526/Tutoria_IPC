@@ -87,7 +87,8 @@
     {
         await base.OnInitializedAsync();
         mentees = EnrollementService.GetEnrollementsWithoutGroupByRoleAllCourses(yearId, "Tutorando");
-
+        tutors = new List<Enrollement>();
+        mentors = new List<Enrollement>();
     }
     void OnChangeMentee(object value)
     {
